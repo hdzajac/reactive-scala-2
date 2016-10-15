@@ -1,7 +1,7 @@
 package lab2
 
 import akka.actor.Actor.Receive
-import akka.actor._
+import akka.actor.{Actor, ActorRef, FSM}
 import akka.event.LoggingReceive
 import akka.io.Udp.SimpleSender
 import lab2.AuctionSearchEngine.AddNewAuction
@@ -10,8 +10,23 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
+
+
+sealed trait State
+
+case object SoldState extends State
+case object InitState extends State
+case object Created extends State
+case object Activated extends State
+case object Ignored extends State
+
+sealed trait Data
+
+case object Uninitialised extends Data
+final case class WinningBuyer(winner: ActorRef, price: Double) extends Data
+
 object Auction {
-  case class Start(product: String)
+  case class Start(productName: String)
 
   case class Bid(price: Double) {
     require(price > 0)
@@ -31,7 +46,7 @@ object Auction {
 }
 
 
-class Auction extends Actor{
+class Auction extends FSM[State,Data]{
   import context._
   import Auction._
 
@@ -43,16 +58,75 @@ class Auction extends Actor{
   var winner: ActorRef = _
   var highestPrice: Double = 0
 
+  startWith(InitState, Uninitialised)
 
-  def receive: Receive = LoggingReceive{
-    case Start(product) =>
-      this.product = product
+  when(InitState) {
+    case Event(Start(productName),Uninitialised) =>
+      this.product = productName
       this.seller = sender
+      goto (Created) using(WinningBuyer(null, 0))
+  }
+
+  when(Created){
+    case Event(Bid(price),d: WinningBuyer) =>
+      log("created")
+      handleBid(sender, price)
+      goto(Activated)
+    case Event(BidTimerExpired, d: WinningBuyer) =>
+      log("Ignoring")
+      goto(Ignored)
+  }
+
+  when(Ignored){
+    case Event(DeleteTimerExpired, d: WinningBuyer) =>
+      log("Deleting")
+      stop()
+    case Event(Bid(price),d :WinningBuyer) =>
+      sender ! BidRejected
+      stay()
+    case Event(Relist, d: WinningBuyer) =>
+      log("Re-listing")
+      goto(Created)
+  }
+  
+  when(Activated) {
+    case Event(Bid(price), d: WinningBuyer) =>
+      log("received Bid from" + sender)
+      handleBid(sender, price)
+      stay()
+    case Event(BidTimerExpired, d: WinningBuyer) =>
+      log("Selling")
+      goto(SoldState)
+  }
+  
+  when (SoldState) {
+    case Event(DeleteTimerExpired, d: WinningBuyer) =>
+      log("Finished, " + product + " sold for: " + highestPrice)
+      winner ! Sold(product, highestPrice)
+      seller ! Sold(product, highestPrice)
+      stop()
+      
+    case Event(Bid(price), _) =>
+      sender ! BidRejected
+      stay()
+  }
+
+  onTransition{
+    case InitState -> Created =>
       context.actorSelection(s"akka://lab2/user/${AuctionSearchEngine.ACTOR_NAME}") ! new AddNewAuction(product)
       context.system.scheduler.scheduleOnce(random.nextInt(10) seconds, self, BidTimerExpired)
-      context become created
+
+    case Created -> Ignored =>
+      context.system.scheduler.scheduleOnce(5 seconds, self, DeleteTimerExpired)
+
+    case Ignored -> Created =>
+      context.system.scheduler.scheduleOnce(random.nextInt(10) seconds, self, BidTimerExpired)
+
+    case Activated -> SoldState =>
+      context.system.scheduler.scheduleOnce(5 seconds, self, DeleteTimerExpired)
 
   }
+
 
   def handleBid(sender: ActorRef, price: Double) = {
     if (price > highestPrice) {
@@ -65,56 +139,6 @@ class Auction extends Actor{
     else {
       sender ! BidRejected
     }
-  }
-
-  def created(): Receive = LoggingReceive{
-      case Bid(price) =>
-        log("Created")
-        handleBid(sender,price)
-        context become activated
-
-      case BidTimerExpired =>
-        context.system.scheduler.scheduleOnce(5 seconds, self, DeleteTimerExpired)
-        context become ignored
-
-      case Relist =>
-        context.system.scheduler.scheduleOnce(random.nextInt(15) seconds, self, BidTimerExpired)
-  }
-
-  def ignored (): Receive = LoggingReceive{
-    case DeleteTimerExpired =>
-      log("Finished, there were no buying offers")
-      context.stop(self)
-
-    case Bid(price) =>
-      sender ! BidRejected
-
-    case Relist =>
-      log("Re-listing auction")
-      context.system.scheduler.scheduleOnce(random.nextInt(10) seconds, self, BidTimerExpired)
-      context become created
-  }
-
-  def activated (): Receive = LoggingReceive{
-    case Bid(price) =>
-      log("Received Bid")
-      handleBid(sender,price)
-
-    case BidTimerExpired =>
-      context.system.scheduler.scheduleOnce(5 seconds, self, DeleteTimerExpired)
-      context become sold
-
-  }
-  def sold (): Receive = LoggingReceive{
-    case DeleteTimerExpired =>
-      log("Finished, " + product + " sold for: " + highestPrice)
-      winner ! Sold(product, highestPrice)
-      seller ! Sold(product, highestPrice)
-      context.stop(self)
-
-    case Bid(price) =>
-      sender ! BidRejected
-
   }
 
   def log(message: String): Unit = {
