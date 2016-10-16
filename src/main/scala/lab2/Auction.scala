@@ -23,7 +23,8 @@ case object Ignored extends State
 sealed trait Data
 
 case object Uninitialised extends Data
-final case class WinningBuyer(winner: ActorRef, price: Double) extends Data
+final case class Initialized(price: Double, seller: ActorRef, productName: String) extends Data
+final case class WinningBuyer(winner: ActorRef, seller: ActorRef, price: Double, productName: String) extends Data
 
 object Auction {
   case class Start(productName: String)
@@ -51,59 +52,66 @@ class Auction extends FSM[State,Data]{
   import Auction._
 
   val random: Random = new Random()
-
-  var product: String = _
+  var soldProduct:String = _
   var bidTime: BigInt = _
-  var seller: ActorRef = _
-  var winner: ActorRef = _
-  var highestPrice: Double = 0
 
   startWith(InitState, Uninitialised)
 
   when(InitState) {
     case Event(Start(productName),Uninitialised) =>
-      this.product = productName
-      this.seller = sender
-      goto (Created) using(WinningBuyer(null, 0))
+      soldProduct = productName
+      context.actorSelection(s"akka://lab2/user/${AuctionSearchEngine.ACTOR_NAME}") ! new AddNewAuction(productName)
+      goto (Created) using Initialized(0,sender,productName)
   }
 
   when(Created){
-    case Event(Bid(price),d: WinningBuyer) =>
+    case Event(Bid(price),d: Initialized) =>
       log("created")
-      handleBid(sender, price)
-      goto(Activated)
-    case Event(BidTimerExpired, d: WinningBuyer) =>
+      if(handleBid(sender, price, d.price)) {
+        context.actorSelection(s"akka://lab2/user/${Notifier.ACTOR_NAME}") ! Notify(d.productName, price, sender)
+        goto(Activated) using WinningBuyer(winner = sender,seller = d.seller, price = price, productName = d.productName )
+      }
+      else {
+        stay()
+      }
+    case Event(BidTimerExpired, d: Initialized) =>
       log("Ignoring")
-      goto(Ignored)
+      goto(Ignored) using Initialized(d.price, d.seller, d.productName)
   }
 
   when(Ignored){
-    case Event(DeleteTimerExpired, d: WinningBuyer) =>
+    case Event(DeleteTimerExpired, d: Initialized) =>
       log("Deleting")
       stop()
-    case Event(Bid(price),d :WinningBuyer) =>
+    case Event(Bid(price),d :Initialized) =>
       sender ! BidRejected
       stay()
-    case Event(Relist, d: WinningBuyer) =>
+    case Event(Relist, d: Initialized) =>
       log("Re-listing")
-      goto(Created)
+      goto(Created) using Initialized(d.price,d.seller, d.productName)
   }
   
   when(Activated) {
     case Event(Bid(price), d: WinningBuyer) =>
       log("received Bid from" + sender)
-      handleBid(sender, price)
-      stay()
+      if(handleBid(sender, price, d.price)) {
+        context.actorSelection(s"akka://lab2/user/${Notifier.ACTOR_NAME}") ! Notify(d.productName, price, sender)
+        WinningBuyer(winner = sender, seller = d.seller, price = price, productName = d.productName)
+        stay()
+      }
+      else {
+        stay()
+      }
     case Event(BidTimerExpired, d: WinningBuyer) =>
       log("Selling")
-      goto(SoldState)
+      goto(SoldState) using WinningBuyer(d.winner,d.seller,d.price,d.productName)
   }
   
   when (SoldState) {
     case Event(DeleteTimerExpired, d: WinningBuyer) =>
-      log("Finished, " + product + " sold for: " + highestPrice)
-      winner ! Sold(product, highestPrice)
-      seller ! Sold(product, highestPrice)
+      log("Finished, " + d.winner + " sold for: " + d.price)
+      d.winner ! Sold(d.productName, d.price)
+      d.seller ! Sold(d.productName, d.price)
       stop()
       
     case Event(Bid(price), _) =>
@@ -113,7 +121,6 @@ class Auction extends FSM[State,Data]{
 
   onTransition{
     case InitState -> Created =>
-      context.actorSelection(s"akka://lab2/user/${AuctionSearchEngine.ACTOR_NAME}") ! new AddNewAuction(product)
       context.system.scheduler.scheduleOnce(random.nextInt(10) seconds, self, BidTimerExpired)
 
     case Created -> Ignored =>
@@ -128,20 +135,19 @@ class Auction extends FSM[State,Data]{
   }
 
 
-  def handleBid(sender: ActorRef, price: Double) = {
+  def handleBid(sender: ActorRef, price: Double, highestPrice:Double):Boolean = {
     if (price > highestPrice) {
       log(f"Higher bid ($$$price%1.2f) accepted!")
-      winner = sender
-      highestPrice = price
       sender ! BidAccepted
-      context.actorSelection(s"akka://lab2/user/${Notifier.ACTOR_NAME}") ! Notify(product, highestPrice, winner)
+      true
     }
     else {
       sender ! BidRejected
+      false
     }
   }
 
   def log(message: String): Unit = {
-    println(f"[Auction ${product} ($$$highestPrice%1.2f)] $message")
+    println(f"[Auction ${soldProduct}  $message")
   }
 }

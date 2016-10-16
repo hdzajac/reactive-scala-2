@@ -42,7 +42,7 @@ class Buyer(val id: Integer) extends Actor{
       if (auctions.nonEmpty) {
         val auction = auctions.toList(random.nextInt(auctions.size))
         log("bidding on auction: " + auction)
-        bid = random.nextDouble() * 100.0
+        bid = random.nextDouble() * 300.0
         auction ! Auction.Bid(bid)
       }
       else {
