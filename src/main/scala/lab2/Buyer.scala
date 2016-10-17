@@ -54,6 +54,7 @@ class Buyer(val id: Integer) extends Actor{
       waitABit
     case Sold(id, price) =>
       log(f"has bought the ${id} for $$$price%1.2f!")
+      context.stop(self)
   }
 
   def waitABit = {

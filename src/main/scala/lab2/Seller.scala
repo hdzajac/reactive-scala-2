@@ -50,9 +50,10 @@ class Seller extends Actor {
       val auction: ActorRef = context.system.actorOf(Props[Auction])
       log("started on auction " + auction)
       auction ! Start(phone)
-      self ! Init
+
     case Auction.Sold(productName, price) =>
       wallet += price
       println(f"$productName sold for $$$price%1.2f. Balance: $$$wallet%1.2f!")
+      context.stop(self)
   }
 }
