@@ -5,7 +5,6 @@ import akka.actor.{Actor, ActorRef, FSM}
 import akka.event.LoggingReceive
 import akka.io.Udp.SimpleSender
 import lab2.AuctionSearch.AddNewAuction
-import lab2.Notifier.Notify
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
@@ -23,8 +22,8 @@ case object Ignored extends State
 sealed trait Data
 
 case object Uninitialised extends Data
-final case class Initialized(price: Double, seller: ActorRef, productName: String) extends Data
-final case class WinningBuyer(winner: ActorRef, seller: ActorRef, price: Double, productName: String) extends Data
+final case class Initialized(price: Double, productName: String) extends Data
+final case class WinningBuyer(winner: ActorRef, price: Double, productName: String) extends Data
 
 object Auction {
   case class Start(productName: String)
@@ -62,23 +61,22 @@ class Auction extends FSM[State,Data]{
   when(InitState) {
     case Event(Start(productName),Uninitialised) =>
       soldProduct = productName
-      context.actorSelection(s"../${AuctionSearch.ACTOR_NAME}") ! new AddNewAuction(productName)
-      goto (Created) using Initialized(0,sender,productName)
+      context.actorSelection(s"../../${AuctionSearch.ACTOR_NAME}") ! new AddNewAuction(productName)
+      goto (Created) using Initialized(0,productName)
   }
 
   when(Created){
     case Event(Bid(price),d: Initialized) =>
       log("created")
       if(handleBid(sender, price, d.price)) {
-        context.actorSelection(s"../${Notifier.ACTOR_NAME}") ! Notify(d.productName, price, sender)
-        goto(Activated) using WinningBuyer(winner = sender,seller = d.seller, price = price, productName = d.productName )
+        goto(Activated) using WinningBuyer(winner = sender, price = price, productName = d.productName )
       }
       else {
         stay()
       }
     case Event(BidTimerExpired, d: Initialized) =>
       log("Ignoring")
-      goto(Ignored) using Initialized(d.price, d.seller, d.productName)
+      goto(Ignored) using Initialized(d.price, d.productName)
   }
 
   when(Ignored){
@@ -90,30 +88,30 @@ class Auction extends FSM[State,Data]{
       stay()
     case Event(Relist, d: Initialized) =>
       log("Re-listing")
-      goto(Created) using Initialized(d.price,d.seller, d.productName)
+      goto(Created) using Initialized(d.price, d.productName)
   }
   
   when(Activated) {
     case Event(Bid(price), d: WinningBuyer) =>
       log("received Bid from" + sender)
       if(handleBid(sender, price, d.price)) {
-        context.actorSelection(s"../${Notifier.ACTOR_NAME}") ! Notify(d.productName, price, sender)
-        stay() using WinningBuyer(winner = sender, seller = d.seller, price = price, productName = d.productName)
-
+        if(sender != d.winner)
+          d.winner ! NewHighestPrice(price)
+        stay() using WinningBuyer(winner = sender,  price = price, productName = d.productName)
       }
       else {
         stay()
       }
     case Event(BidTimerExpired, d: WinningBuyer) =>
       log("Selling")
-      goto(SoldState) using WinningBuyer(d.winner,d.seller,d.price,d.productName)
+      goto(SoldState) using WinningBuyer(d.winner,d.price,d.productName)
   }
   
   when (SoldState) {
     case Event(DeleteTimerExpired, d: WinningBuyer) =>
       log("Finished, " + d.winner + " sold for: " + d.price)
       d.winner ! Sold(d.productName, d.price)
-      d.seller ! Sold(d.productName, d.price)
+      parent ! Sold(d.productName, d.price)
       stop()
       
     case Event(Bid(price), _) =>
@@ -150,6 +148,6 @@ class Auction extends FSM[State,Data]{
   }
 
   def log(message: String): Unit = {
-    println(f"[Auction ${soldProduct}  $message")
+    println(f"[Auction ${this}  $message")
   }
 }

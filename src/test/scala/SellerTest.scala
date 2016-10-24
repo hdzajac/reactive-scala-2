@@ -1,8 +1,8 @@
 import akka.actor.{Props, ActorRef, ActorSystem}
 import akka.testkit.{TestProbe, ImplicitSender, TestKit}
-import lab2.Auction.{BidAccepted, Sold, Bid}
+import lab2.Auction.{Start, BidAccepted, Sold, Bid}
 import lab2.AuctionSearch.{SearchResult, GetAuctions}
-import lab2.{AuctionSearch, Seller}
+import lab2.{Auction, AuctionSearch, Seller}
 import lab2.Seller.{GetWallet, Init}
 import org.scalatest.{Matchers, BeforeAndAfterAll, WordSpecLike}
 import scala.concurrent.duration._
@@ -63,6 +63,16 @@ class SellerTest extends TestKit(ActorSystem("auction_house")) with WordSpecLike
 
       seller2 ! GetWallet
       expectMsg(1000.0)
+    }
+
+    "has an auction as child" in {
+      val sellerParent = TestProbe("seller4")
+      val auction: ActorRef = sellerParent.childActorOf(Props[Auction])
+      val seller5 = TestProbe("seller5")
+      sellerParent.send(auction, Start("Phone3"))
+      seller5.send(auction, Bid(1000.0))
+
+      sellerParent.expectMsg(30 second, Auction.Sold("Phone3", 1000.0))
     }
   }
 }

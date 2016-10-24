@@ -14,8 +14,8 @@ class AuctionTest extends TestKit(ActorSystem("auction_house")) with WordSpecLik
 
 
 
-  "A Buyer" must {
-    "get info about accepting bid" in {
+  "An Auction" must {
+    "send info about accepting bid" in {
       val auction: ActorRef = system.actorOf(Props[Auction])
       val seller1 = TestProbe("seller1")
       seller1.send(auction, Start("Phone1"))
@@ -24,7 +24,7 @@ class AuctionTest extends TestKit(ActorSystem("auction_house")) with WordSpecLik
       seller1.expectMsg(20 second, Auction.BidAccepted)
     }
 
-    "get info about rejected bid" in {
+    "send info about rejecting bid" in {
       val auction: ActorRef = system.actorOf(Props[Auction])
       val seller2 = TestProbe("seller2")
       val seller3 = TestProbe("seller3")
@@ -35,7 +35,7 @@ class AuctionTest extends TestKit(ActorSystem("auction_house")) with WordSpecLik
       seller2.expectMsg(20 second, Auction.BidRejected)
     }
 
-    "get info about won auction" in {
+    "send info about won auction" in {
       val auction: ActorRef = system.actorOf(Props[Auction])
       val seller4 = TestProbe("seller4")
       val seller5 = TestProbe("seller5")
@@ -45,6 +45,19 @@ class AuctionTest extends TestKit(ActorSystem("auction_house")) with WordSpecLik
 
       seller4.expectMsg(10 second, Auction.BidAccepted)
       seller4.expectMsg(50 second, Auction.Sold("Phone3", 1000.0))
+    }
+
+    "send info about new highest price" in {
+      val auction: ActorRef = system.actorOf(Props[Auction])
+      val seller6 = TestProbe("Seller6")
+      val seller7 = TestProbe("Seller7")
+
+      seller6.send(auction, Start("Phone4"))
+      seller7.send(auction, Bid(200.0))
+      seller6.send(auction, Bid(210.0))
+
+      seller7.expectMsg(2 seconds, Auction.BidAccepted)
+      seller7.expectMsg(5 seconds, Auction.NewHighestPrice(210.0))
     }
   }
 

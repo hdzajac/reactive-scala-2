@@ -14,7 +14,6 @@ object AuctionApp extends App{
   var i = 0
 
   system.actorOf(Props[AuctionSearch], AuctionSearch.ACTOR_NAME)
-  system.actorOf(Props[Notifier], Notifier.ACTOR_NAME)
 
   val sellers: List[ActorRef] = for (i <- (1 to sellersNumber).toList) yield {
     val seller: ActorRef = system.actorOf(Props(new Seller()))
@@ -27,7 +26,6 @@ object AuctionApp extends App{
     buyer ! Buyer.Init
   }
 
-  system.actorOf(Props[AuctionDispatcher], AuctionDispatcher.ACTOR_NAME)
 
   system.awaitTermination()
 

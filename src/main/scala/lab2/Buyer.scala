@@ -25,7 +25,7 @@ class Buyer(val id: Integer) extends Actor{
   import Buyer._
 
   val random: Random = new Random()
-  val maxBid:Double = random.nextDouble() * 300
+  val maxBid: Double = random.nextDouble() * 300
   val lookingFor = features(random.nextInt(features.size))
   var bid: Double = 0.0
   var bids = new ListBuffer[Double]()
@@ -44,8 +44,8 @@ class Buyer(val id: Integer) extends Actor{
     case AuctionSearch.SearchResult(auctions) =>
       if (auctions.nonEmpty) {
         val auction = auctions.toList(random.nextInt(auctions.size))
-        log("bidding on auction: " + auction)
         bid = random.nextDouble() * maxBid
+        log("bidding: " + bid + " on auction: " + auction)
         auction ! Auction.Bid(bid)
       }
       else {

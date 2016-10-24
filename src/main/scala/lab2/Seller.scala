@@ -53,13 +53,13 @@ class Seller extends Actor {
 
     case Execute =>
       phone = Seller.items(random.nextInt(Seller.items.size))
-      val auction: ActorRef = context.system.actorOf(Props[Auction])
+      val auction: ActorRef = context.actorOf(Props[Auction])
       log("started on random auction " + auction)
       auction ! Start(phone)
 
     case Execute(product) =>
       phone = product
-      val auction: ActorRef = context.system.actorOf(Props[Auction])
+      val auction: ActorRef = context.actorOf(Props[Auction])
       log("started on auction " + auction)
       auction ! Start(phone)
 
