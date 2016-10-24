@@ -4,7 +4,7 @@ import akka.actor.Actor.Receive
 import akka.actor.{Actor, ActorRef, FSM}
 import akka.event.LoggingReceive
 import akka.io.Udp.SimpleSender
-import lab2.AuctionSearchEngine.AddNewAuction
+import lab2.AuctionSearch.AddNewAuction
 import lab2.Notifier.Notify
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -44,6 +44,8 @@ object Auction {
   case object Relist
 
   case class Sold(productName: String, finalPrice: Double)
+
+  case class NewHighestPrice (newHighestPrice: Double)
 }
 
 
@@ -60,7 +62,7 @@ class Auction extends FSM[State,Data]{
   when(InitState) {
     case Event(Start(productName),Uninitialised) =>
       soldProduct = productName
-      context.actorSelection(s"akka://lab2/user/${AuctionSearchEngine.ACTOR_NAME}") ! new AddNewAuction(productName)
+      context.actorSelection(s"../${AuctionSearch.ACTOR_NAME}") ! new AddNewAuction(productName)
       goto (Created) using Initialized(0,sender,productName)
   }
 
@@ -68,7 +70,7 @@ class Auction extends FSM[State,Data]{
     case Event(Bid(price),d: Initialized) =>
       log("created")
       if(handleBid(sender, price, d.price)) {
-        context.actorSelection(s"akka://lab2/user/${Notifier.ACTOR_NAME}") ! Notify(d.productName, price, sender)
+        context.actorSelection(s"../${Notifier.ACTOR_NAME}") ! Notify(d.productName, price, sender)
         goto(Activated) using WinningBuyer(winner = sender,seller = d.seller, price = price, productName = d.productName )
       }
       else {
@@ -95,9 +97,9 @@ class Auction extends FSM[State,Data]{
     case Event(Bid(price), d: WinningBuyer) =>
       log("received Bid from" + sender)
       if(handleBid(sender, price, d.price)) {
-        context.actorSelection(s"akka://lab2/user/${Notifier.ACTOR_NAME}") ! Notify(d.productName, price, sender)
-        WinningBuyer(winner = sender, seller = d.seller, price = price, productName = d.productName)
-        stay()
+        context.actorSelection(s"../${Notifier.ACTOR_NAME}") ! Notify(d.productName, price, sender)
+        stay() using WinningBuyer(winner = sender, seller = d.seller, price = price, productName = d.productName)
+
       }
       else {
         stay()
@@ -121,7 +123,7 @@ class Auction extends FSM[State,Data]{
 
   onTransition{
     case InitState -> Created =>
-      context.system.scheduler.scheduleOnce(random.nextInt(10) seconds, self, BidTimerExpired)
+      context.system.scheduler.scheduleOnce(5  + random.nextInt(10)seconds , self, BidTimerExpired)
 
     case Created -> Ignored =>
       context.system.scheduler.scheduleOnce(5 seconds, self, DeleteTimerExpired)

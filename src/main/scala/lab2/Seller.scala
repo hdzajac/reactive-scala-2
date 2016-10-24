@@ -9,7 +9,10 @@ import scala.concurrent.duration.DurationInt
 object Seller {
 
   case object Execute
+  case class Execute(product: String)
   case object Init
+  case class Init(product: String)
+  case object GetWallet
 
   val items = List(
     "Apple IPhone 4",
@@ -45,14 +48,26 @@ class Seller extends Actor {
     case Init =>
       context.system.scheduler.scheduleOnce(random.nextInt(30) seconds, self, Execute)
 
+    case Init(product) =>
+       self ! Execute(product)
+
     case Execute =>
       phone = Seller.items(random.nextInt(Seller.items.size))
       val auction: ActorRef = context.system.actorOf(Props[Auction])
+      log("started on random auction " + auction)
+      auction ! Start(phone)
+
+    case Execute(product) =>
+      phone = product
+      val auction: ActorRef = context.system.actorOf(Props[Auction])
       log("started on auction " + auction)
       auction ! Start(phone)
-      self ! Init
+
     case Auction.Sold(productName, price) =>
       wallet += price
-      println(f"$productName sold for $$$price%1.2f. Balance: $$$wallet%1.2f!")
+      println(f"[Seller: ${this}] productName sold for $$$price%1.2f. Balance: $$$wallet%1.2f!")
+
+    case GetWallet =>
+      sender ! wallet
   }
 }

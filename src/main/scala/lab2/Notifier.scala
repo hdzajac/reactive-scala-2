@@ -11,7 +11,7 @@ object Notifier {
 class Notifier extends Actor {
   import Notifier._
 
-  val auctionDispatcher = context.system.actorSelection(s"akka://lab2/user/${AuctionDispatcher.ACTOR_NAME}")
+  val auctionDispatcher = context.system.actorSelection(s"../${AuctionDispatcher.ACTOR_NAME}")
 
   override def receive: Receive = {
     case Notify(product, price, winner) =>

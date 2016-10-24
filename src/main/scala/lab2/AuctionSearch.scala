@@ -5,17 +5,17 @@ import scala.collection.mutable
 import scala.util.Random
 
 
-object AuctionSearchEngine {
+object AuctionSearch {
 
-  val ACTOR_NAME = "AUCTION_SEARCH_ENGINE"
+  val ACTOR_NAME = "AUCTION_SEARCH"
 
   case class GetAuctions(reference: String)
   case class AddNewAuction(product: String)
   case class SearchResult(auctions: Iterable[ActorRef])
 }
 
-class AuctionSearchEngine extends Actor{
-  import AuctionSearchEngine._
+class AuctionSearch extends Actor{
+  import AuctionSearch._
 
   val random: Random = new Random()
 
@@ -23,7 +23,7 @@ class AuctionSearchEngine extends Actor{
 
   override def receive: Actor.Receive = {
     case AddNewAuction(productName) =>
-      println("received")
+      println("Adding new Auction: " + productName)
       auctions += (productName.toLowerCase() -> sender)
       context.watch(sender)
 
