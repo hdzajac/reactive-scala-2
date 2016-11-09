@@ -68,7 +68,7 @@ class Buyer(val id: Integer) extends Actor{
   }
 
   def waitABit = {
-    context.system.scheduler.scheduleOnce(random.nextInt(2) seconds, self, Execute)
+    context.system.scheduler.scheduleOnce(2 seconds, self, Execute)
   }
 
 }

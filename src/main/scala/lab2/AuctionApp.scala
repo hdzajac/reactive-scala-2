@@ -5,11 +5,14 @@ import com.typesafe.config.ConfigFactory
 import lab2.Seller._
 import lab2.Buyer._
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 object AuctionApp extends App{
   val sellersNumber = 5
   val buyersNumber = 10
   val config = ConfigFactory.load()
-  val system = ActorSystem("auction_house", config.getConfig("auctionapp").withFallback(config))
+  val system = ActorSystem("auction_house")
 
   var i = 0
 
@@ -27,6 +30,5 @@ object AuctionApp extends App{
   }
 
 
-  system.awaitTermination()
-
+  Await.result(system.whenTerminated, Duration.Inf)
 }
