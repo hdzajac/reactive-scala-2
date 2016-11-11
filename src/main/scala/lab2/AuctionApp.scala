@@ -12,12 +12,11 @@ object AuctionApp extends App{
   val sellersNumber = 5
   val buyersNumber = 10
   val config = ConfigFactory.load()
-  val system = ActorSystem("lab2", config.getConfig("auctionapp").withFallback(config))
+  val system = ActorSystem("auction_house")
 
   var i = 0
 
-  system.actorOf(Props[AuctionSearchEngine], AuctionSearchEngine.ACTOR_NAME)
-  system.actorOf(Props[Notifier], Notifier.ACTOR_NAME)
+  system.actorOf(Props[AuctionSearch], AuctionSearch.ACTOR_NAME)
 
   val sellers: List[ActorRef] = for (i <- (1 to sellersNumber).toList) yield {
     val seller: ActorRef = system.actorOf(Props(new Seller()))
@@ -30,9 +29,6 @@ object AuctionApp extends App{
     buyer ! Buyer.Init
   }
 
-  val auctionDispatcherSystem = ActorSystem("DispatcherSystem")
-  auctionDispatcherSystem.actorOf(Props[AuctionDispatcher], AuctionDispatcher.ACTOR_NAME)
 
-  Await.result(system.whenTerminated,Duration.Inf)
-
+  Await.result(system.whenTerminated, Duration.Inf)
 }

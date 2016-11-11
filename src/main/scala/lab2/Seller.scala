@@ -2,6 +2,7 @@ package lab2
 
 import akka.actor.{Props, ActorRef, Actor}
 import lab2.Auction.Start
+import org.joda.time.DateTime
 import scala.util.Random
 import scala.concurrent.duration.DurationInt
 
@@ -9,7 +10,10 @@ import scala.concurrent.duration.DurationInt
 object Seller {
 
   case object Execute
+  case class Execute(product: String)
   case object Init
+  case class Init(product: String)
+  case object GetWallet
 
   val items = List(
     "Apple IPhone 4",
@@ -45,15 +49,26 @@ class Seller extends Actor {
     case Init =>
       context.system.scheduler.scheduleOnce(random.nextInt(30) seconds, self, Execute)
 
+    case Init(product) =>
+       self ! Execute(product)
+
     case Execute =>
       phone = Seller.items(random.nextInt(Seller.items.size))
-      val auction: ActorRef = context.system.actorOf(Props[Auction])
+      val auction: ActorRef = context.actorOf(Props(classOf[Auction], DateTime.now().plusSeconds(15), phone))
+      log("started on random auction " + auction)
+      auction ! Start()
+
+    case Execute(product) =>
+      phone = product
+      val auction: ActorRef = context.actorOf(Props(classOf[Auction], DateTime.now().plusSeconds(15), phone))
       log("started on auction " + auction)
-      auction ! Start(phone)
+      auction ! Start()
 
     case Auction.Sold(productName, price) =>
       wallet += price
-      println(f"$productName sold for $$$price%1.2f. Balance: $$$wallet%1.2f!")
-      context.stop(self)
+      println(f"[Seller: ${this}] productName sold for $$$price%1.2f. Balance: $$$wallet%1.2f!")
+
+    case GetWallet =>
+      sender ! wallet
   }
 }

@@ -1,8 +1,9 @@
 package lab2
 
 import akka.actor.Actor
-import lab2.Auction.{Sold, BidRejected, BidAccepted}
-import lab2.AuctionSearchEngine.GetAuctions
+import lab2.Auction.{NewHighestPrice, Sold, BidRejected, BidAccepted}
+import lab2.AuctionSearch.GetAuctions
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.DurationInt
 import scala.util.Random
 
@@ -24,8 +25,10 @@ class Buyer(val id: Integer) extends Actor{
   import Buyer._
 
   val random: Random = new Random()
+  val maxBid: Double = random.nextDouble() * 300
   val lookingFor = features(random.nextInt(features.size))
   var bid: Double = 0.0
+  var bids = new ListBuffer[Double]()
 
   def log(message: String): Unit = {
     println(s"Buyer #${id} [${lookingFor}]: ${message}")
@@ -33,32 +36,39 @@ class Buyer(val id: Integer) extends Actor{
 
   override def receive: Receive = {
     case Init =>
-      log("Initialized!")
+      log("Initialized! with max price: " + maxBid)
       waitABit
     case Execute =>
-      context.actorSelection(s"akka://lab2/user/${AuctionSearchEngine.ACTOR_NAME}") ! new GetAuctions(lookingFor)
+      context.actorSelection(s"../${AuctionSearch.ACTOR_NAME}") ! new GetAuctions(lookingFor)
 
-    case AuctionSearchEngine.SearchResult(auctions) =>
+    case AuctionSearch.SearchResult(auctions) =>
       if (auctions.nonEmpty) {
         val auction = auctions.toList(random.nextInt(auctions.size))
-        log("bidding on auction: " + auction)
-        bid = random.nextDouble() * 100.0
+        bid = random.nextDouble() * maxBid
+        log("bidding: " + bid + " on auction: " + auction)
         auction ! Auction.Bid(bid)
       }
       else {
         waitABit
       }
     case BidAccepted =>
+      bids += bid
       waitABit
     case BidRejected =>
       waitABit
     case Sold(id, price) =>
       log(f"has bought the ${id} for $$$price%1.2f!")
-      context.stop(self)
+    case NewHighestPrice(newHighest: Double) =>
+      log("new highest price: " + newHighest)
+      bids += newHighest
+      if (newHighest + 1 <= maxBid){
+        bid = newHighest + 1
+        sender ! Auction.Bid(bid)
+      }
   }
 
   def waitABit = {
-    context.system.scheduler.scheduleOnce(random.nextInt(2) seconds, self, Execute)
+    context.system.scheduler.scheduleOnce(2 seconds, self, Execute)
   }
 
 }
