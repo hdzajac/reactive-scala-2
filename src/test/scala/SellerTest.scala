@@ -4,6 +4,7 @@ import lab2.Auction.{Start, BidAccepted, Sold, Bid}
 import lab2.AuctionSearch.{SearchResult, GetAuctions}
 import lab2.{Auction, AuctionSearch, Seller}
 import lab2.Seller.{GetWallet, Init}
+import org.joda.time.DateTime
 import org.scalatest.{Matchers, BeforeAndAfterAll, WordSpecLike}
 import scala.concurrent.duration._
 
@@ -67,9 +68,9 @@ class SellerTest extends TestKit(ActorSystem("auction_house")) with WordSpecLike
 
     "has an auction as child" in {
       val sellerParent = TestProbe("seller4")
-      val auction: ActorRef = sellerParent.childActorOf(Props[Auction])
+      val auction: ActorRef = sellerParent.childActorOf(Props(classOf[Auction], DateTime.now().plusSeconds(15), "Phone3"))
       val seller5 = TestProbe("seller5")
-      sellerParent.send(auction, Start("Phone3"))
+      sellerParent.send(auction, Start())
       seller5.send(auction, Bid(1000.0))
 
       sellerParent.expectMsg(30 second, Auction.Sold("Phone3", 1000.0))

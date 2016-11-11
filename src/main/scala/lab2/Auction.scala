@@ -7,7 +7,7 @@ import akka.event.LoggingReceive
 import akka.persistence.{SaveSnapshotSuccess, PersistentActor, SnapshotOffer}
 import lab2.Auction.{NewHighestPrice}
 import lab2.AuctionSearch.AddNewAuction
-import org.joda.time.DateTime
+import org.joda.time.{Seconds, DateTime}
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -25,13 +25,13 @@ case object SoldState extends State
 //Events
 case class StateChangeEvent(state: State)
 case class BidEvent(sender: ActorRef, price: Double)
-case class InitEvent(soldProduct: String)
+case class InitEvent()
 
 
 
 object Auction {
   //Messages
-  case class Start(productName: String)
+  case class Start()
   case class Bid(price: Double) {
     require(price > 0)
   }
@@ -46,9 +46,9 @@ object Auction {
     println(f"[Auction ${this}  $message")
   }
 
-  def handleBid(sender: ActorRef, price: Double, currentPrice: Double):Boolean = {
-    if (price > currentPrice) {
-      log(f"Higher bid ($$$price%1.2f) accepted!")
+  def handleBid(sender: ActorRef, p: Double, cp: Double):Boolean = {
+    if (p > cp) {
+      log(f"Higher bid ($$$p%1.2f) accepted!")
       sender ! BidAccepted
       true
     }
@@ -60,46 +60,49 @@ object Auction {
 }
 
 //Data
-case class AuctionData( soldProduct: String, finishTime: DateTime = DateTime.now().plusSeconds(15),
-  currentPrice: Double = 0.0, currentWinner: ActorRef = null){
+case class AuctionData( soldProduct: String, currentPrice: Double = 0.0, currentWinner: ActorRef = null){
   def updated(evt: BidEvent): AuctionData = {
-    println(s"Applying $evt")
+    println(s"Applying $evt: price $currentPrice for: $soldProduct")
     if(Auction.handleBid(evt.sender, evt.price, currentPrice)) {
       if (currentWinner != null && evt.sender != currentWinner) {
         currentWinner ! NewHighestPrice(evt.price)
       }
-      AuctionData(soldProduct, finishTime, evt.price, evt.sender)
+      AuctionData(soldProduct, evt.price, evt.sender)
     }
     else
       this
-  }
-
-  def updated(evt: InitEvent): AuctionData = {
-    println(s"Applying $evt")
-
-    new AuctionData(evt.soldProduct)
   }
 
   override def toString: String = "Sold: " + soldProduct + " for: " + currentPrice + " to: " + currentWinner
 }
 
 
-class Auction extends PersistentActor{
+
+
+class Auction(finishTime: DateTime, soldProduct: String) extends PersistentActor{
   import Auction._
   import context._
 
-  override def persistenceId = "persistent-auction-id-1"
+  override def persistenceId = "persistent-auction-id-" + this.hashCode()
 
-  val random: Random = new Random()
-  var data: AuctionData = AuctionData("")
+  var data: AuctionData = AuctionData(soldProduct)
 
   def startBidTimer(duration: Duration) = context.system.scheduler.scheduleOnce(
     FiniteDuration(duration toSeconds, TimeUnit.SECONDS), self, BidTimerExpired)
+
+  def setTimer() = {
+    val currentTime: DateTime = DateTime.now()
+    if (currentTime.isBefore(finishTime)){
+      val duration:Duration = Duration.create(Seconds.secondsBetween(currentTime,finishTime).toStandardDuration.getStandardSeconds, TimeUnit.SECONDS)
+      startBidTimer(duration)
+    }
+  }
 
   def updateState(event: StateChangeEvent): Unit = {
     println(s"Applying $event")
     context.become(event.state match {
       case Created =>
+        setTimer()
         created
       case Activated =>
         activated
@@ -118,14 +121,13 @@ class Auction extends PersistentActor{
   }
 
   def updateState(event: InitEvent): Unit = {
-    context.actorSelection(s"../../${AuctionSearch.ACTOR_NAME}") ! new AddNewAuction(event.soldProduct)
-    data = data.updated(event)
+    context.actorSelection(s"../../${AuctionSearch.ACTOR_NAME}") ! new AddNewAuction(soldProduct)
   }
 
 
   def initState: Receive =  {
-      case Start(productName) =>
-        persist(InitEvent(productName)){
+      case Start() =>
+        persist(InitEvent()){
           event => updateState(event)
         }
         persist(StateChangeEvent(Created)){
@@ -184,7 +186,10 @@ class Auction extends PersistentActor{
 
   override def receiveRecover: Receive = {
     case evt: StateChangeEvent => updateState(evt)
-    case SnapshotOffer(_, snapshot: AuctionData) => data = snapshot
+    case SnapshotOffer(metadata, snapshot: AuctionData) => {
+      log(s"offer, AuctionData: $snapshot, metadata: $metadata")
+      data = snapshot
+    }
   }
 
 }

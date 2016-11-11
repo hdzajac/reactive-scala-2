@@ -2,6 +2,7 @@ package lab2
 
 import akka.actor.{Props, ActorRef, Actor}
 import lab2.Auction.Start
+import org.joda.time.DateTime
 import scala.util.Random
 import scala.concurrent.duration.DurationInt
 
@@ -53,15 +54,15 @@ class Seller extends Actor {
 
     case Execute =>
       phone = Seller.items(random.nextInt(Seller.items.size))
-      val auction: ActorRef = context.actorOf(Props[Auction])
+      val auction: ActorRef = context.actorOf(Props(classOf[Auction], DateTime.now().plusSeconds(15), phone))
       log("started on random auction " + auction)
-      auction ! Start(phone)
+      auction ! Start()
 
     case Execute(product) =>
       phone = product
-      val auction: ActorRef = context.actorOf(Props[Auction])
+      val auction: ActorRef = context.actorOf(Props(classOf[Auction], DateTime.now().plusSeconds(15), phone))
       log("started on auction " + auction)
-      auction ! Start(phone)
+      auction ! Start()
 
     case Auction.Sold(productName, price) =>
       wallet += price
