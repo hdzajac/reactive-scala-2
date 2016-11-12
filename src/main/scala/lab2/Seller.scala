@@ -66,7 +66,7 @@ class Seller extends Actor {
 
     case Auction.Sold(productName, price) =>
       wallet += price
-      println(f"[Seller: ${this}] productName sold for $$$price%1.2f. Balance: $$$wallet%1.2f!")
+      println(f"[Seller: ${this}] $productName sold for $$$price%1.2f. Balance: $$$wallet%1.2f!")
 
     case GetWallet =>
       sender ! wallet

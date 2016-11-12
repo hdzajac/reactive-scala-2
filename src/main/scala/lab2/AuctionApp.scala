@@ -2,8 +2,7 @@ package lab2
 
 import akka.actor.{ActorRef, Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
-import lab2.Seller._
-import lab2.Buyer._
+
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -12,7 +11,8 @@ object AuctionApp extends App{
   val sellersNumber = 5
   val buyersNumber = 10
   val config = ConfigFactory.load()
-  val system = ActorSystem("auction_house")
+  val system = ActorSystem("AuctionHouse", config.getConfig("auction-house").withFallback(config))
+  val publisher = ActorSystem("AuctionPublisher", config.getConfig("auction-publisher").withFallback(config))
 
   var i = 0
 
@@ -29,6 +29,8 @@ object AuctionApp extends App{
     buyer ! Buyer.Init
   }
 
+  system.actorOf(Props[Notifier], "notifier")
+  publisher.actorOf(Props[AuctionPublisher], "auctionPublisher")
 
   Await.result(system.whenTerminated, Duration.Inf)
 }

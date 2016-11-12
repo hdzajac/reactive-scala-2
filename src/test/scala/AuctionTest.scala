@@ -60,6 +60,8 @@ class AuctionTest extends TestKit(ActorSystem("auction_house_test")) with WordSp
       seller7.expectMsg(2 seconds, Auction.BidAccepted)
       seller7.expectMsg(5 seconds, Auction.NewHighestPrice(210.0))
     }
+
+
   }
 
 }

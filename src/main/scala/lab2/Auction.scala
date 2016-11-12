@@ -2,7 +2,7 @@ package lab2
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorRef
+import akka.actor.{ActorSelection, ActorRef}
 import akka.event.LoggingReceive
 import akka.persistence.{SaveSnapshotSuccess, PersistentActor, SnapshotOffer}
 import lab2.Auction.{NewHighestPrice}
@@ -47,6 +47,7 @@ object Auction {
   }
 
   def handleBid(sender: ActorRef, p: Double, cp: Double):Boolean = {
+    System.out.println("Checking if: " + p + " overbids current price: " + cp)
     if (p > cp) {
       log(f"Higher bid ($$$p%1.2f) accepted!")
       sender ! BidAccepted
@@ -60,14 +61,15 @@ object Auction {
 }
 
 //Data
-case class AuctionData( soldProduct: String, currentPrice: Double = 0.0, currentWinner: ActorRef = null){
+case class AuctionData(notifier: ActorSelection, soldProduct: String, currentPrice: Double = 0.0, currentWinner: ActorRef = null){
   def updated(evt: BidEvent): AuctionData = {
     println(s"Applying $evt: price $currentPrice for: $soldProduct")
     if(Auction.handleBid(evt.sender, evt.price, currentPrice)) {
       if (currentWinner != null && evt.sender != currentWinner) {
         currentWinner ! NewHighestPrice(evt.price)
       }
-      AuctionData(soldProduct, evt.price, evt.sender)
+      notifier ! Notify(soldProduct, evt.sender,currentPrice)
+      AuctionData(notifier, soldProduct, evt.price, evt.sender)
     }
     else
       this
@@ -83,9 +85,10 @@ class Auction(finishTime: DateTime, soldProduct: String) extends PersistentActor
   import Auction._
   import context._
 
-  override def persistenceId = "persistent-auction-id-" + this.hashCode()
+  override def persistenceId = "persistent-auction-id-" + soldProduct
+  val notifier = context.actorSelection("../../notifier")
 
-  var data: AuctionData = AuctionData(soldProduct)
+  var data: AuctionData = AuctionData(notifier, soldProduct)
 
   def startBidTimer(duration: Duration) = context.system.scheduler.scheduleOnce(
     FiniteDuration(duration toSeconds, TimeUnit.SECONDS), self, BidTimerExpired)
@@ -160,7 +163,7 @@ class Auction(finishTime: DateTime, soldProduct: String) extends PersistentActor
 
     }
 
-    def activated: Receive = {
+    def activated: Receive =  LoggingReceive {
       case Bid(price) =>
         persist(BidEvent(sender,price)){
           event => updateState(event)
