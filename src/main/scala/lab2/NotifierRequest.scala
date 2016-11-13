@@ -1,6 +1,6 @@
 package lab2
 
-import akka.actor.{Actor}
+import akka.actor.{ActorPaths, Actor}
 import akka.pattern.ask
 import akka.util.Timeout
 import scala.concurrent.duration._

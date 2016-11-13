@@ -11,13 +11,16 @@ class Notifier extends Actor {
   override val supervisorStrategy =
     OneForOneStrategy() {
       case _: IllegalStateException =>
-        System.out.println("Notification exception.")
+        System.out.println("Notification exception...... Restarting")
         Restart
-      case _: Exception => Stop
+      case _: Exception =>
+        System.out.println("Other exception encountered....... Quiting")
+        Stop
     }
 
   override def receive: Receive = {
-    case notification: Notify => context.actorOf(Props(classOf[NotifierRequest], notification))
+    case notification: Notify =>
+      val notifierRequest: ActorRef = context.actorOf(Props(classOf[NotifierRequest], notification))
   }
 }
 
