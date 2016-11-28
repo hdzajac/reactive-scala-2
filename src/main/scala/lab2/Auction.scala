@@ -124,7 +124,7 @@ class Auction(finishTime: DateTime, soldProduct: String) extends PersistentActor
   }
 
   def updateState(event: InitEvent): Unit = {
-    context.actorSelection(s"../../${AuctionSearch.ACTOR_NAME}") ! new AddNewAuction(soldProduct)
+
   }
 
 

@@ -37,9 +37,8 @@ class Buyer(val id: Integer) extends Actor{
   override def receive: Receive = {
     case Init =>
       log("Initialized! with max price: " + maxBid)
-      waitABit
     case Execute =>
-      context.actorSelection(s"../${AuctionSearch.ACTOR_NAME}") ! new GetAuctions(lookingFor)
+      context.actorSelection(s"../${MasterSearch.ACTOR_NAME}") ! GetAuctions(lookingFor)
 
     case AuctionSearch.SearchResult(auctions) =>
       if (auctions.nonEmpty) {
